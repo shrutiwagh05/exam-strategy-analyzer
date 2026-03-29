@@ -16,6 +16,7 @@ The classification is based on:
 
 * **Average Time per Question**
 * **Variation in Response Time**
+* **Standard Deviation in response Time to get more detailed insights**
 
 **Strategy Logic:**
 
