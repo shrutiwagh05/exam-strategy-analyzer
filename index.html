@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Exam Strategy Analyzer</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg:#0a0a0f; --surface:#111118; --surface2:#1a1a24; --border:#2a2a3a;
+  --accent:#00e5ff; --accent3:#a259ff; --fast:#00e5ff; --balanced:#a259ff;
+  --slow:#ff6b35; --text:#e8e8f0; --muted:#6b6b80; --success:#00d68f;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;}
+body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");pointer-events:none;z-index:0;opacity:.5;}
+
+/* ── UPLOAD ── */
+#upload-screen{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg);transition:opacity .5s ease,visibility .5s;}
+#upload-screen.hidden{opacity:0;visibility:hidden;pointer-events:none;}
+.upload-hero{text-align:center;max-width:580px;padding:0 24px;}
+.upload-badge{display:inline-block;background:linear-gradient(135deg,var(--accent)22,var(--accent3)22);border:1px solid var(--accent)55;color:var(--accent);font-family:'Space Mono',monospace;font-size:11px;letter-spacing:3px;padding:6px 16px;border-radius:2px;margin-bottom:28px;}
+.upload-hero h1{font-size:clamp(2.2rem,6vw,4rem);font-weight:800;line-height:1.05;letter-spacing:-2px;background:linear-gradient(135deg,var(--text) 40%,var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:16px;}
+.upload-hero p{color:var(--muted);font-size:15px;line-height:1.7;margin-bottom:32px;}
+.drop-zone{border:2px dashed var(--border);border-radius:12px;padding:40px;text-align:center;cursor:pointer;transition:all .3s;background:var(--surface);position:relative;overflow:hidden;}
+.drop-zone::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,var(--accent)08,transparent 70%);opacity:0;transition:.3s;}
+.drop-zone:hover,.drop-zone.drag-over{border-color:var(--accent)88;background:var(--surface2);}
+.drop-zone:hover::before,.drop-zone.drag-over::before{opacity:1;}
+.drop-icon{font-size:40px;margin-bottom:12px;display:block;filter:drop-shadow(0 0 20px var(--accent)66);}
+.drop-zone h3{font-size:17px;font-weight:700;margin-bottom:6px;}
+.drop-zone p{color:var(--muted);font-size:13px;}
+.btn-upload{margin-top:18px;display:inline-block;background:var(--accent);color:#000;font-family:'Space Mono',monospace;font-size:12px;font-weight:700;letter-spacing:1px;padding:12px 28px;border-radius:4px;border:none;cursor:pointer;transition:.2s;}
+.btn-upload:hover{transform:translateY(-2px);box-shadow:0 8px 30px var(--accent)44;}
+.format-hint{margin-top:14px;color:var(--muted);font-size:11px;font-family:'Space Mono',monospace;line-height:1.8;}
+.format-hint span{color:var(--accent);}
+
+/* ── DASHBOARD ── */
+#dashboard{display:none;position:relative;z-index:1;}
+#dashboard.show{display:block;animation:fadeUp .6s ease;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── TOPBAR ── */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:18px 36px;border-bottom:1px solid var(--border);background:var(--surface);position:sticky;top:0;z-index:50;backdrop-filter:blur(12px);}
+.topbar-logo{font-weight:800;font-size:18px;letter-spacing:-1px;background:linear-gradient(90deg,var(--accent),var(--accent3));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.topbar-file{font-family:'Space Mono',monospace;font-size:12px;color:var(--muted);background:var(--surface2);border:1px solid var(--border);padding:6px 14px;border-radius:4px;}
+.topbar-right{display:flex;gap:10px;align-items:center;}
+.btn-reload{font-family:'Space Mono',monospace;font-size:11px;background:transparent;color:var(--accent);border:1px solid var(--accent)55;padding:8px 18px;border-radius:4px;cursor:pointer;letter-spacing:1px;transition:.2s;}
+.btn-reload:hover{background:var(--accent)15;}
+.sid-toggle{font-family:'Space Mono',monospace;font-size:11px;background:var(--surface2);color:var(--muted);border:1px solid var(--border);padding:8px 14px;border-radius:4px;cursor:pointer;letter-spacing:1px;transition:.2s;}
+.sid-toggle.on{color:var(--success);border-color:var(--success)55;background:var(--success)15;}
+
+/* ── LAYOUT ── */
+.container{max-width:1400px;margin:0 auto;padding:28px 36px;}
+
+/* ── CARDS ── */
+.cards-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:28px;}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:22px;position:relative;overflow:hidden;transition:.3s;}
+.card::after{content:'';position:absolute;top:0;left:0;right:0;height:2px;}
+.card.fast::after{background:var(--fast);}
+.card.balanced::after{background:var(--balanced);}
+.card.slow::after{background:var(--slow);}
+.card.total::after{background:linear-gradient(90deg,var(--accent),var(--accent3));}
+.card.avg::after{background:var(--success);}
+.card.sid::after{background:linear-gradient(90deg,#f7971e,#ffd200);}
+.card:hover{transform:translateY(-2px);box-shadow:0 12px 40px #0008;}
+.card-label{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:10px;}
+.card-value{font-size:2.2rem;font-weight:800;letter-spacing:-2px;line-height:1;}
+.card.fast .card-value{color:var(--fast);}
+.card.balanced .card-value{color:var(--balanced);}
+.card.slow .card-value{color:var(--slow);}
+.card.total .card-value{color:var(--text);}
+.card.avg .card-value{color:var(--success);}
+.card.sid .card-value{color:#ffd200;}
+.card-sub{font-size:11px;color:var(--muted);margin-top:5px;}
+
+/* ── SECTION ── */
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;}
+.section-title{font-size:12px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--muted);font-family:'Space Mono',monospace;}
+
+/* ── CHARTS ── */
+.charts-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:24px;}
+.charts-grid.three{grid-template-columns:2fr 1fr 1fr;}
+@media(max-width:900px){.charts-grid,.charts-grid.three{grid-template-columns:1fr;}}
+.chart-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:22px;}
+.chart-title{font-size:13px;font-weight:700;letter-spacing:.5px;margin-bottom:18px;color:var(--text);}
+.chart-wrap{position:relative;height:220px;}
+
+/* ── LEGEND ── */
+.legend-row{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:24px;}
+.legend-item{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 18px;flex:1;min-width:180px;}
+.legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.legend-info h4{font-size:13px;font-weight:700;margin-bottom:2px;}
+.legend-info p{font-size:11px;color:var(--muted);line-height:1.5;}
+
+/* ── Q BREAKDOWN ── */
+.q-breakdown{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:24px;}
+.q-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;text-align:center;}
+.q-card-num{font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);margin-bottom:6px;letter-spacing:1px;}
+.q-card-avg{font-size:1.5rem;font-weight:800;letter-spacing:-1px;}
+.q-card-label{font-size:10px;color:var(--muted);margin-top:3px;}
+.q-mini-bar{height:3px;border-radius:2px;margin-top:8px;background:linear-gradient(90deg,var(--accent),var(--accent3));transform-origin:left;}
+
+/* ── INSIGHTS ── */
+.insights-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:24px;}
+@media(max-width:700px){.insights-grid{grid-template-columns:1fr;}}
+.insight-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;}
+.insight-icon{font-size:26px;margin-bottom:10px;}
+.insight-card h3{font-size:14px;font-weight:700;margin-bottom:6px;}
+.insight-card p{font-size:12px;color:var(--muted);line-height:1.7;}
+.insight-stat{display:inline-block;margin-top:10px;font-family:'Space Mono',monospace;font-size:18px;font-weight:700;}
+
+/* ── LEADERBOARD ── */
+.leaderboard-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:24px;}
+@media(max-width:700px){.leaderboard-grid{grid-template-columns:1fr;}}
+.lb-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+.lb-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.lb-header h3{font-size:13px;font-weight:700;}
+.lb-header span{font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;}
+.lb-row{display:flex;align-items:center;gap:12px;padding:11px 20px;border-bottom:1px solid var(--border)44;cursor:pointer;transition:background .15s;}
+.lb-row:hover{background:var(--surface2);}
+.lb-row:last-child{border-bottom:none;}
+.lb-rank{font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);min-width:24px;}
+.lb-rank.gold{color:#ffd200;font-weight:700;}
+.lb-rank.silver{color:#c0c0c0;font-weight:700;}
+.lb-rank.bronze{color:#cd7f32;font-weight:700;}
+.lb-avatar{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;}
+.lb-name{flex:1;font-size:13px;font-weight:600;}
+.lb-sid{font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);}
+.lb-val{font-family:'Space Mono',monospace;font-size:12px;font-weight:700;}
+
+/* ── TABLE ── */
+.table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:24px;}
+.table-controls{padding:16px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+.search-box{flex:1;min-width:180px;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:'Space Mono',monospace;font-size:12px;padding:9px 14px;border-radius:6px;outline:none;transition:.2s;}
+.search-box:focus{border-color:var(--accent)66;}
+.filter-btn{padding:9px 16px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-family:'Space Mono',monospace;font-size:10px;cursor:pointer;transition:.2s;letter-spacing:1px;}
+.filter-btn.fast.active{color:var(--fast);border-color:var(--fast)88;background:var(--fast)15;}
+.filter-btn.balanced.active{color:var(--balanced);border-color:var(--balanced)88;background:var(--balanced)15;}
+.filter-btn.slow.active{color:var(--slow);border-color:var(--slow)88;background:var(--slow)15;}
+.filter-btn.all.active{color:var(--text);border-color:var(--border);background:var(--surface2);}
+table{width:100%;border-collapse:collapse;}
+thead th{padding:12px 18px;text-align:left;font-family:'Space Mono',monospace;font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;border-bottom:1px solid var(--border);cursor:pointer;user-select:none;white-space:nowrap;}
+thead th:hover{color:var(--text);}
+thead th.asc::after{content:' ↑';}
+thead th.desc::after{content:' ↓';}
+tbody tr{border-bottom:1px solid var(--border)55;transition:background .15s;cursor:pointer;}
+tbody tr:hover{background:var(--surface2);}
+tbody tr:last-child{border-bottom:none;}
+tbody td{padding:12px 18px;font-size:12px;}
+.strategy-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:100px;font-family:'Space Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.5px;}
+.strategy-badge.fast{background:var(--fast)20;color:var(--fast);}
+.strategy-badge.balanced{background:var(--balanced)20;color:var(--balanced);}
+.strategy-badge.slow{background:var(--slow)20;color:var(--slow);}
+.strategy-badge::before{content:'●';font-size:7px;}
+.time-bar{display:flex;align-items:center;gap:8px;}
+.time-bar-track{flex:1;height:3px;background:var(--border);border-radius:2px;overflow:hidden;}
+.time-bar-fill{height:100%;border-radius:2px;}
+.sid-cell{font-family:'Space Mono',monospace;font-size:11px;color:#ffd200;font-weight:700;}
+.table-footer{padding:12px 22px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);}
+.pagination{display:flex;gap:5px;align-items:center;}
+.page-btn{padding:5px 10px;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:10px;font-family:'Space Mono',monospace;transition:.2s;}
+.page-btn:hover,.page-btn.active{border-color:var(--accent)55;color:var(--accent);}
+.page-btn:disabled{opacity:.3;cursor:not-allowed;}
+
+/* ── STUDENT PROFILE MODAL ── */
+.modal-overlay{position:fixed;inset:0;background:#0009;z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;opacity:0;visibility:hidden;transition:.3s;}
+.modal-overlay.open{opacity:1;visibility:visible;}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:16px;width:100%;max-width:680px;max-height:90vh;overflow-y:auto;animation:modalIn .3s ease;}
+@keyframes modalIn{from{transform:scale(.96) translateY(12px)}to{transform:scale(1) translateY(0)}}
+.modal-header{padding:24px 28px 0;display:flex;align-items:flex-start;justify-content:space-between;}
+.modal-avatar{width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;flex-shrink:0;border:2px solid;}
+.modal-title-block{flex:1;padding-left:16px;}
+.modal-name{font-size:20px;font-weight:800;letter-spacing:-1px;}
+.modal-sid{font-family:'Space Mono',monospace;font-size:12px;color:var(--muted);margin-top:3px;}
+.modal-close{background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer;font-size:16px;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:.2s;flex-shrink:0;}
+.modal-close:hover{border-color:var(--slow);color:var(--slow);}
+.modal-body{padding:24px 28px;}
+.modal-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;}
+.mstat{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;text-align:center;}
+.mstat-val{font-size:1.4rem;font-weight:800;letter-spacing:-1px;}
+.mstat-lbl{font-family:'Space Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1px;margin-top:4px;}
+.modal-chart-wrap{height:160px;position:relative;margin-bottom:20px;}
+.modal-q-bars{display:flex;gap:8px;align-items:flex-end;height:100px;margin-bottom:20px;}
+.modal-q-bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;}
+.modal-q-bar-outer{width:100%;background:var(--border);border-radius:4px;height:80px;display:flex;align-items:flex-end;overflow:hidden;}
+.modal-q-bar-inner{width:100%;border-radius:4px;transition:.6s ease;}
+.modal-q-bar-label{font-family:'Space Mono',monospace;font-size:9px;color:var(--muted);}
+.modal-q-bar-val{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;}
+.modal-rank-row{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;}
+.rank-chip{flex:1;min-width:120px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;text-align:center;}
+.rank-chip-val{font-family:'Space Mono',monospace;font-size:1.3rem;font-weight:700;}
+.rank-chip-lbl{font-size:11px;color:var(--muted);margin-top:3px;}
+.modal-peers{border-top:1px solid var(--border);padding-top:18px;}
+.modal-peers h4{font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);font-family:'Space Mono',monospace;margin-bottom:12px;}
+.peer-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)44;}
+.peer-row:last-child{border-bottom:none;}
+.peer-avatar{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;}
+.peer-name{flex:1;font-size:12px;}
+.peer-avg{font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);}
+
+/* ── MISC ── */
+.btn-export{background:var(--surface2);color:var(--text);border:1px solid var(--border);font-family:'Space Mono',monospace;font-size:11px;padding:9px 18px;border-radius:6px;cursor:pointer;letter-spacing:1px;transition:.2s;}
+.btn-export:hover{border-color:var(--accent)55;color:var(--accent);}
+.loading-bar{height:2px;background:linear-gradient(90deg,var(--accent),var(--accent3),var(--slow));background-size:200%;animation:shimmer 1.2s infinite linear;margin-bottom:28px;border-radius:1px;}
+@keyframes shimmer{0%{background-position:200%}100%{background-position:-200%}}
+.empty-state{text-align:center;padding:50px 20px;color:var(--muted);font-family:'Space Mono',monospace;font-size:12px;}
+.no-sid-banner{background:linear-gradient(135deg,#ffd20015,#f7971e15);border:1px solid #ffd20044;border-radius:8px;padding:12px 18px;margin-bottom:20px;font-size:13px;color:#ffd200;display:none;font-family:'Space Mono',monospace;}
+.no-sid-banner.show{display:block;}
+</style>
+</head>
+<body>
+
+<!-- UPLOAD SCREEN -->
+<div id="upload-screen">
+  <div class="upload-hero">
+    <div class="upload-badge">HACKATHON — PROBLEM 29</div>
+    <h1>Exam Strategy<br>Analyzer</h1>
+    <p>Upload your exam attempt log to classify each student's strategy as <strong style="color:var(--fast)">Fast</strong>, <strong style="color:var(--balanced)">Balanced</strong>, or <strong style="color:var(--slow)">Slow</strong> — with full per-student profiles.</p>
+    <div class="drop-zone" id="drop-zone" onclick="triggerFile()">
+      <span class="drop-icon">📊</span>
+      <h3>Drop your file here</h3>
+      <p>Supports .xlsx and .csv files</p>
+      <button class="btn-upload" type="button" onclick="event.stopPropagation();triggerFile()">Choose File</button>
+    </div> 
+    <input type="file" id="file-input" accept=".xlsx,.csv" style="position:fixed;left:-9999px;top:-9999px;opacity:0;" tabindex="-1">
+    <div class="format-hint">
+      Expected columns: <span>student_id</span> (optional) + question time columns<br>
+      Example: <span>student_id, Q1, Q2, Q3, Q4, Q5</span><br>
+      Without student_id: <span>Q1, Q2, Q3, Q4, Q5</span> — IDs auto-generated
+    </div>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboard">
+  <div class="topbar">
+    <div class="topbar-logo">StratAnalyzer</div>
+    <div class="topbar-file" id="file-name-label">No file loaded</div>
+    <div class="topbar-right">
+      <button class="sid-toggle" id="sid-toggle-btn" onclick="toggleSidView()">👤 Student IDs</button>
+      <button class="btn-reload" onclick="resetDashboard()">↩ New File</button>
+    </div>
+  </div> 
+
+  <div class="container">
+    <div class="loading-bar" id="loading-bar" style="display:none"></div>
+    <div class="no-sid-banner" id="no-sid-banner">⚠ No <strong>student_id</strong> column detected. Auto-generating IDs as STU001, STU002... Add a "student_id" column to your file for named profiles.</div>
+
+    <!-- Summary Cards -->
+    <div class="cards-row" id="cards-row"></div>
+
+    <!-- Legend -->
+    <div class="legend-row">
+      <div class="legend-item"><div class="legend-dot" style="background:var(--fast)"></div><div class="legend-info"><h4 style="color:var(--fast)">Fast Attempt</h4><p>Avg time ≤ 33rd percentile. Quick, minimal hesitation.</p></div></div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--balanced)"></div><div class="legend-info"><h4 style="color:var(--balanced)">Balanced Attempt</h4><p>Avg time 33rd–66th percentile. Steady, deliberate pacing.</p></div></div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--slow)"></div><div class="legend-info"><h4 style="color:var(--slow)">Slow Attempt</h4><p>Avg time ≥ 66th percentile. Extended deliberation.</p></div></div>
+    </div>
+
+    <!-- Charts Row 1 -->
+    <div class="section-header"><span class="section-title">Distribution Analysis</span></div>
+    <div class="charts-grid three" style="margin-bottom:24px">
+      <div class="chart-card"><div class="chart-title">Strategy Distribution Over Attempts</div><div class="chart-wrap"><canvas id="chart-dist"></canvas></div></div>
+      <div class="chart-card"><div class="chart-title">Strategy Breakdown</div><div class="chart-wrap" style="height:200px;display:flex;align-items:center;justify-content:center"><canvas id="chart-donut"></canvas></div></div>
+      <div class="chart-card"><div class="chart-title">Avg Time Variation (Std Dev)</div><div class="chart-wrap"><canvas id="chart-variation"></canvas></div></div>
+    </div>
+
+    <!-- Per-Q -->
+    <div class="section-header"><span class="section-title">Per-Question Averages</span></div>
+    <div class="q-breakdown" id="q-breakdown"></div>
+
+    <!-- Charts Row 2 -->
+    <div class="charts-grid" style="margin-bottom:24px">
+      <div class="chart-card"><div class="chart-title">Avg Time per Question by Strategy</div><div class="chart-wrap"><canvas id="chart-heatmap"></canvas></div></div>
+      <div class="chart-card"><div class="chart-title">Total Time Distribution</div><div class="chart-wrap"><canvas id="chart-hist"></canvas></div></div>
+    </div>
+
+    <!-- Insights -->
+    <div class="section-header"><span class="section-title">Key Insights</span></div>
+    <div class="insights-grid" id="insights-grid"></div>
+
+    <!-- LEADERBOARDS — only shown when student_id exists -->
+    <div id="leaderboard-section" style="display:none">
+      <div class="section-header"><span class="section-title">Student Leaderboards</span><span style="font-family:'Space Mono',monospace;font-size:11px;color:var(--muted)">Click any row to open profile</span></div>
+      <div class="leaderboard-grid">
+        <div class="lb-card">
+          <div class="lb-header"><h3>⚡ Fastest Students</h3><span>BY AVG TIME</span></div>
+          <div id="lb-fastest"></div>
+        </div>
+        <div class="lb-card">
+          <div class="lb-header"><h3>🎯 Most Consistent</h3><span>LOWEST STD DEV</span></div>
+          <div id="lb-consistent"></div>
+        </div>
+        <div class="lb-card">
+          <div class="lb-header"><h3>🐢 Slowest Students</h3><span>BY AVG TIME</span></div>
+          <div id="lb-slowest"></div>
+        </div>
+        <div class="lb-card">
+          <div class="lb-header"><h3>🌊 Most Variable</h3><span>HIGHEST STD DEV</span></div>
+          <div id="lb-variable"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="section-header">
+      <span class="section-title">Attempt Log</span>
+      <button class="btn-export" onclick="exportCSV()">⬇ Export CSV</button>
+    </div>
+    <div class="table-wrap">
+      <div class="table-controls">
+        <input class="search-box" id="search-box" placeholder="Search by student ID, strategy, value..." oninput="renderTable()">
+        <button class="filter-btn all active" id="btn-all" onclick="setFilter('all')">ALL</button>
+        <button class="filter-btn fast" id="btn-fast" onclick="setFilter('Fast Attempt')">FAST</button>
+        <button class="filter-btn balanced" id="btn-balanced" onclick="setFilter('Balanced Attempt')">BALANCED</button>
+        <button class="filter-btn slow" id="btn-slow" onclick="setFilter('Slow Attempt')">SLOW</button>
+      </div>
+      <div style="overflow-x:auto">
+        <table><thead id="table-head"></thead><tbody id="table-body"></tbody></table>
+      </div>
+      <div class="table-footer">
+        <span id="table-count"></span>
+        <div class="pagination" id="pagination"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- STUDENT PROFILE MODAL -->
+<div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
+  <div class="modal" id="modal-box">
+    <div class="modal-header">
+      <div class="modal-avatar" id="modal-avatar">?</div>
+      <div class="modal-title-block">
+        <div class="modal-name" id="modal-name">—</div>
+        <div class="modal-sid" id="modal-sid">—</div>
+      </div>
+      <button class="modal-close" onclick="closeModalDirect()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-stats" id="modal-stats"></div>
+      <div style="font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:10px;">TIME PER QUESTION</div>
+      <div class="modal-q-bars" id="modal-q-bars"></div>
+      <div class="modal-rank-row" id="modal-rank-row"></div>
+      <div class="modal-peers" id="modal-peers"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── STATE ───────────────────────────
+let allData = [], processedData = [], colNames = [];
+let hasSID = false, showSID = true;
+let filterStrategy = 'all', sortCol = null, sortDir = 'asc';
+let currentPage = 1;
+const PAGE_SIZE = 20;
+let charts = {};
+
+// ─── UPLOAD ──────────────────────────
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+
+function triggerFile() { fileInput.value=''; fileInput.click(); }
+
+dropZone.addEventListener('dragover', e=>{e.preventDefault();e.stopPropagation();dropZone.classList.add('drag-over');});
+dropZone.addEventListener('dragleave', e=>{e.stopPropagation();dropZone.classList.remove('drag-over');});
+dropZone.addEventListener('drop', e=>{e.preventDefault();e.stopPropagation();dropZone.classList.remove('drag-over');handleFile(e.dataTransfer.files[0]);});
+fileInput.addEventListener('change', function(){if(this.files&&this.files[0])handleFile(this.files[0]);});
+
+function handleFile(file) {
+  if(!file) return;
+  const ext = file.name.split('.').pop().toLowerCase();
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      if(ext==='csv') parseCSV(ev.target.result, file.name);
+      else {
+        const wb = XLSX.read(new Uint8Array(ev.target.result), {type:'array'});
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        processRawMatrix(XLSX.utils.sheet_to_json(ws,{header:1}), file.name);
+      }
+    } catch(err){ alert('Error: '+err.message); }
+  };
+  if(ext==='csv') reader.readAsText(file);
+  else reader.readAsArrayBuffer(file);
+}
+
+function parseCSV(text, name) {
+  const matrix = text.trim().split('\n').map(l=>l.split(',').map(v=>v.trim()));
+  processRawMatrix(matrix, name);
+}
+
+function processRawMatrix(matrix, name) {
+  if(!matrix.length) return;
+  const firstRow = matrix[0];
+
+  // Detect header
+  const hasHeader = firstRow.some(v => isNaN(Number(v)) && v !== '');
+  let headers = [], dataStart = 0;
+  if(hasHeader) { headers = firstRow.map((h,i)=>String(h||`Q${i+1}`)); dataStart=1; }
+  else { headers = firstRow.map((_,i)=>`Q${i+1}`); }
+
+  // Detect student_id column (first col whose header contains 'id' or 'student')
+  const sidIdx = headers.findIndex(h => /student.?id|sid|id/i.test(h));
+  hasSID = sidIdx >= 0;
+
+  const rawRows = matrix.slice(dataStart).filter(r=>r.some(v=>v!==''&&v!==undefined&&v!==null));
+
+  // Build allData (numeric question cols only) + studentIds
+  const questionIdxs = headers.map((_,i)=>i).filter(i=>i!==sidIdx);
+  colNames = questionIdxs.map(i=>headers[i]);
+
+  allData = rawRows.map(r=>{
+    const sid = hasSID ? String(r[sidIdx]||'').trim() : null;
+    const qvals = questionIdxs.map(i=>Number(r[i])||0);
+    return {sid, qvals};
+  });
+
+  if(!allData.length){ alert('No data found.'); return; }
+  if(!hasSID) allData.forEach((d,i)=>d.sid=`STU${String(i+1).padStart(3,'0')}`);
+
+  document.getElementById('file-name-label').textContent = name;
+  processData();
+  showDashboard();
+}
+
+// ─── CLASSIFICATION ───────────────────
+function percentile(arr, p) {
+  const s=[...arr].sort((a,b)=>a-b);
+  const idx=(p/100)*(s.length-1), lo=Math.floor(idx), hi=Math.ceil(idx);
+  return s[lo]+(s[hi]-s[lo])*(idx-lo);
+}
+function classifyStrategy(avg, p33, p66) {
+  return avg<=p33?'Fast Attempt':avg<=p66?'Balanced Attempt':'Slow Attempt';
+}
+
+function processData() {
+  const avgs = allData.map(d=>d.qvals.reduce((s,v)=>s+v,0)/d.qvals.length);
+  const p33=percentile(avgs,33), p66=percentile(avgs,66);
+  processedData = allData.map((d,i)=>{
+    const avg=avgs[i];
+    const total=d.qvals.reduce((s,v)=>s+v,0);
+    const variance=d.qvals.reduce((s,v)=>s+(v-avg)**2,0)/d.qvals.length;
+    const stdDev=Math.sqrt(variance);
+    const strategy=classifyStrategy(avg,p33,p66);
+    return {id:i+1, sid:d.sid, qvals:d.qvals, avg, total, stdDev, strategy, p33, p66};
+  });
+  // Rank by avg (ascending = fastest first)
+  const ranked=[...processedData].sort((a,b)=>a.avg-b.avg);
+  processedData.forEach(d=>{ d.rankAvg=ranked.findIndex(r=>r.sid===d.sid)+1; });
+}
+
+// ─── DASHBOARD ────────────────────────
+function showDashboard() {
+  document.getElementById('upload-screen').classList.add('hidden');
+  const dash=document.getElementById('dashboard');
+  dash.style.display='block';
+  requestAnimationFrame(()=>dash.classList.add('show'));
+  // Show/hide student_id banner
+  document.getElementById('no-sid-banner').classList.toggle('show',!hasSID);
+  document.getElementById('leaderboard-section').style.display = 'block';
+  const btn=document.getElementById('sid-toggle-btn');
+  btn.classList.toggle('on',showSID);
+  renderAll();
+}
+
+function resetDashboard() {
+  document.getElementById('upload-screen').classList.remove('hidden');
+  document.getElementById('dashboard').classList.remove('show');
+  document.getElementById('dashboard').style.display='none';
+  fileInput.value='';
+  Object.values(charts).forEach(c=>c.destroy());
+  charts={};
+  hasSID=false; showSID=true;
+}
+
+function toggleSidView() {
+  showSID=!showSID;
+  const btn=document.getElementById('sid-toggle-btn');
+  btn.classList.toggle('on',showSID);
+  renderTable();
+}
+
+function renderAll() {
+  renderCards(); renderCharts(); renderQBreakdown();
+  renderInsights(); renderLeaderboards(); renderTable();
+}
+
+// ─── CARDS ────────────────────────────
+function renderCards() {
+  const counts={'Fast Attempt':0,'Balanced Attempt':0,'Slow Attempt':0};
+  let totalAvg=0;
+  processedData.forEach(d=>{counts[d.strategy]++;totalAvg+=d.avg;});
+  totalAvg/=processedData.length;
+  const uniqueSIDs=new Set(processedData.map(d=>d.sid)).size;
+  document.getElementById('cards-row').innerHTML=`
+    <div class="card total"><div class="card-label">Total Attempts</div><div class="card-value">${processedData.length}</div><div class="card-sub">${colNames.length} questions each</div></div>
+    <div class="card sid"><div class="card-label">Unique Students</div><div class="card-value">${uniqueSIDs}</div><div class="card-sub">${hasSID?'from student_id column':'auto-generated IDs'}</div></div>
+    <div class="card fast"><div class="card-label">Fast Attempt</div><div class="card-value">${counts['Fast Attempt']}</div><div class="card-sub">${((counts['Fast Attempt']/processedData.length)*100).toFixed(1)}% of total</div></div>
+    <div class="card balanced"><div class="card-label">Balanced Attempt</div><div class="card-value">${counts['Balanced Attempt']}</div><div class="card-sub">${((counts['Balanced Attempt']/processedData.length)*100).toFixed(1)}% of total</div></div>
+    <div class="card slow"><div class="card-label">Slow Attempt</div><div class="card-value">${counts['Slow Attempt']}</div><div class="card-sub">${((counts['Slow Attempt']/processedData.length)*100).toFixed(1)}% of total</div></div>
+    <div class="card avg"><div class="card-label">Overall Avg Time/Q</div><div class="card-value">${totalAvg.toFixed(1)}</div><div class="card-sub">across all attempts</div></div>`;
+}
+
+// ─── CHARTS ───────────────────────────
+const C={fast:'#00e5ff',balanced:'#a259ff',slow:'#ff6b35'};
+
+function renderCharts() {
+  const bucketSize=Math.ceil(processedData.length/30);
+  const buckets=[];
+  for(let i=0;i<processedData.length;i+=bucketSize){
+    const sl=processedData.slice(i,i+bucketSize);
+    buckets.push({label:`${i+1}–${Math.min(i+bucketSize,processedData.length)}`,
+      fast:sl.filter(d=>d.strategy==='Fast Attempt').length,
+      bal:sl.filter(d=>d.strategy==='Balanced Attempt').length,
+      slow:sl.filter(d=>d.strategy==='Slow Attempt').length});
+  }
+  if(charts['dist'])charts['dist'].destroy();
+  charts['dist']=new Chart(document.getElementById('chart-dist'),{type:'bar',data:{labels:buckets.map(b=>b.label),datasets:[
+    {label:'Fast',data:buckets.map(b=>b.fast),backgroundColor:C.fast+'99',stack:'s'},
+    {label:'Balanced',data:buckets.map(b=>b.bal),backgroundColor:C.balanced+'99',stack:'s'},
+    {label:'Slow',data:buckets.map(b=>b.slow),backgroundColor:C.slow+'99',stack:'s'}
+  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#6b6b80',font:{size:11}}}},scales:{x:{stacked:true,ticks:{color:'#6b6b80',font:{size:9}},grid:{color:'#2a2a3a'}},y:{stacked:true,ticks:{color:'#6b6b80'},grid:{color:'#2a2a3a'}}}}});
+
+  const counts={'Fast Attempt':0,'Balanced Attempt':0,'Slow Attempt':0};
+  processedData.forEach(d=>counts[d.strategy]++);
+  if(charts['donut'])charts['donut'].destroy();
+  charts['donut']=new Chart(document.getElementById('chart-donut'),{type:'doughnut',data:{labels:['Fast','Balanced','Slow'],datasets:[{data:[counts['Fast Attempt'],counts['Balanced Attempt'],counts['Slow Attempt']],backgroundColor:[C.fast+'cc',C.balanced+'cc',C.slow+'cc'],borderColor:'#0a0a0f',borderWidth:3}]},options:{responsive:false,width:180,height:180,cutout:'70%',plugins:{legend:{position:'bottom',labels:{color:'#6b6b80',font:{size:11},padding:10}}}}});
+
+  const varD={fast:[],balanced:[],slow:[]};
+  processedData.forEach(d=>{if(d.strategy==='Fast Attempt')varD.fast.push(d.stdDev);else if(d.strategy==='Balanced Attempt')varD.balanced.push(d.stdDev);else varD.slow.push(d.stdDev);});
+  const avgV=a=>a.length?(a.reduce((s,v)=>s+v,0)/a.length).toFixed(2):0;
+  if(charts['variation'])charts['variation'].destroy();
+  charts['variation']=new Chart(document.getElementById('chart-variation'),{type:'bar',data:{labels:['Fast','Balanced','Slow'],datasets:[{label:'Avg Std Dev',data:[avgV(varD.fast),avgV(varD.balanced),avgV(varD.slow)],backgroundColor:[C.fast+'bb',C.balanced+'bb',C.slow+'bb'],borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#6b6b80'},grid:{color:'#2a2a3a'}},y:{ticks:{color:'#6b6b80'},grid:{color:'#2a2a3a'}}}}});
+
+  const qAvgs={fast:[],balanced:[],slow:[]};
+  colNames.forEach((_,qi)=>{
+    const fv=processedData.filter(d=>d.strategy==='Fast Attempt').map(d=>d.qvals[qi]||0);
+    const bv=processedData.filter(d=>d.strategy==='Balanced Attempt').map(d=>d.qvals[qi]||0);
+    const sv=processedData.filter(d=>d.strategy==='Slow Attempt').map(d=>d.qvals[qi]||0);
+    qAvgs.fast.push(fv.length?fv.reduce((s,v)=>s+v,0)/fv.length:0);
+    qAvgs.balanced.push(bv.length?bv.reduce((s,v)=>s+v,0)/bv.length:0);
+    qAvgs.slow.push(sv.length?sv.reduce((s,v)=>s+v,0)/sv.length:0);
+  });
+  if(charts['heatmap'])charts['heatmap'].destroy();
+  charts['heatmap']=new Chart(document.getElementById('chart-heatmap'),{type:'bar',data:{labels:colNames,datasets:[
+    {label:'Fast',data:qAvgs.fast,backgroundColor:C.fast+'88',borderRadius:4},
+    {label:'Balanced',data:qAvgs.balanced,backgroundColor:C.balanced+'88',borderRadius:4},
+    {label:'Slow',data:qAvgs.slow,backgroundColor:C.slow+'88',borderRadius:4}
+  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#6b6b80',font:{size:11}}}},scales:{x:{ticks:{color:'#6b6b80'},grid:{color:'#2a2a3a'}},y:{ticks:{color:'#6b6b80'},grid:{color:'#2a2a3a'}}}}});
+
+  const totals=processedData.map(d=>d.total);
+  const minT=Math.min(...totals),maxT=Math.max(...totals),bins=15;
+  const bSize=(maxT-minT)/bins;
+  const hb=Array.from({length:bins},(_,i)=>({label:`${Math.round(minT+i*bSize)}`,count:0}));
+  totals.forEach(t=>{const bi=Math.min(Math.floor((t-minT)/bSize),bins-1);hb[bi].count++;});
+  if(charts['hist'])charts['hist'].destroy();
+  charts['hist']=new Chart(document.getElementById('chart-hist'),{type:'bar',data:{labels:hb.map(b=>b.label),datasets:[{label:'# Attempts',data:hb.map(b=>b.count),backgroundColor:hb.map((_,i)=>{const t=i/bins;return t<0.33?C.fast+'aa':t<0.66?C.balanced+'aa':C.slow+'aa';}),borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#6b6b80',font:{size:9}},grid:{color:'#2a2a3a'}},y:{ticks:{color:'#6b6b80'},grid:{color:'#2a2a3a'}}}}});
+}
+
+// ─── Q BREAKDOWN ──────────────────────
+function renderQBreakdown() {
+  const qAvgs=colNames.map((_,qi)=>{const v=processedData.map(d=>d.qvals[qi]||0);return v.reduce((s,v)=>s+v,0)/v.length;});
+  const mx=Math.max(...qAvgs);
+  document.getElementById('q-breakdown').innerHTML=colNames.map((col,qi)=>`
+    <div class="q-card">
+      <div class="q-card-num">${col}</div>
+      <div class="q-card-avg" style="color:${qi%3===0?'var(--fast)':qi%3===1?'var(--balanced)':'var(--slow)'}">${qAvgs[qi].toFixed(1)}</div>
+      <div class="q-card-label">avg time</div>
+      <div class="q-mini-bar" style="width:${(qAvgs[qi]/mx*100).toFixed(0)}%"></div>
+    </div>`).join('');
+}
+
+// ─── INSIGHTS ─────────────────────────
+function renderInsights() {
+  const fast=processedData.filter(d=>d.strategy==='Fast Attempt');
+  const bal=processedData.filter(d=>d.strategy==='Balanced Attempt');
+  const slow=processedData.filter(d=>d.strategy==='Slow Attempt');
+  const avgStd=a=>a.length?(a.reduce((s,d)=>s+d.stdDev,0)/a.length).toFixed(1):'N/A';
+  const avgAvg=a=>a.length?(a.reduce((s,d)=>s+d.avg,0)/a.length).toFixed(1):'N/A';
+  const qAvgs=colNames.map((_,qi)=>processedData.reduce((s,d)=>s+(d.qvals[qi]||0),0)/processedData.length);
+  const hQ=qAvgs.indexOf(Math.max(...qAvgs)), eQ=qAvgs.indexOf(Math.min(...qAvgs));
+  const topFast=[...fast].sort((a,b)=>a.avg-b.avg).slice(0,3).map(d=>`<strong style="color:var(--fast)">${d.sid}</strong>`).join(', ');
+  const topSlow=[...slow].sort((a,b)=>b.avg-a.avg).slice(0,3).map(d=>`<strong style="color:var(--slow)">${d.sid}</strong>`).join(', ');
+  document.getElementById('insights-grid').innerHTML=`
+    <div class="insight-card"><div class="insight-icon">⚡</div><h3>Fast Attempt Profile</h3><p>Avg time/Q: <strong style="color:var(--fast)">${avgAvg(fast)}</strong> · Avg std dev: ${avgStd(fast)}<br>Top fast students: ${topFast||'—'}</p><span class="insight-stat" style="color:var(--fast)">${fast.length} students</span></div>
+    <div class="insight-card"><div class="insight-icon">⚖️</div><h3>Balanced Attempt Profile</h3><p>Avg time/Q: <strong style="color:var(--balanced)">${avgAvg(bal)}</strong> · Avg std dev: ${avgStd(bal)}<br>Moderate, selective pacing across questions.</p><span class="insight-stat" style="color:var(--balanced)">${bal.length} students</span></div>
+    <div class="insight-card"><div class="insight-icon">🐢</div><h3>Slow Attempt Profile</h3><p>Avg time/Q: <strong style="color:var(--slow)">${avgAvg(slow)}</strong> · Avg std dev: ${avgStd(slow)}<br>Slowest students: ${topSlow||'—'}</p><span class="insight-stat" style="color:var(--slow)">${slow.length} students</span></div>
+    <div class="insight-card"><div class="insight-icon">📌</div><h3>Hardest vs Easiest Question</h3><p>Most time on <strong style="color:var(--accent)">${colNames[hQ]}</strong> (avg ${qAvgs[hQ].toFixed(1)}), least on <strong style="color:var(--success)">${colNames[eQ]}</strong> (avg ${qAvgs[eQ].toFixed(1)}). Difficulty gap: <strong>${(qAvgs[hQ]/qAvgs[eQ]).toFixed(1)}×</strong></p><span class="insight-stat">${(qAvgs[hQ]/qAvgs[eQ]).toFixed(1)}× gap</span></div>`;
+}
+
+// ─── LEADERBOARDS ─────────────────────
+function avatarStyle(strategy) {
+  const map={'Fast Attempt':['var(--fast)20','var(--fast)','⚡'],'Balanced Attempt':['var(--balanced)20','var(--balanced)','⚖️'],'Slow Attempt':['var(--slow)20','var(--slow)','🐢']};
+  return map[strategy]||['#ffffff10','#fff','?'];
+}
+function rankLabel(i) {
+  if(i===0)return'<span class="lb-rank gold">🥇</span>';
+  if(i===1)return'<span class="lb-rank silver">🥈</span>';
+  if(i===2)return'<span class="lb-rank bronze">🥉</span>';
+  return`<span class="lb-rank">${i+1}</span>`;
+}
+function makeLbRows(sorted, valFn, suffix='') {
+  return sorted.slice(0,8).map((d,i)=>{
+    const [bg,col,ico]=avatarStyle(d.strategy);
+    return`<div class="lb-row" onclick="openProfile('${d.sid}')">
+      ${rankLabel(i)}
+      <div class="lb-avatar" style="background:${bg};color:${col};border-color:${col}44">${ico}</div>
+      <div style="flex:1">
+        <div class="lb-name">${d.sid}</div>
+        <div class="lb-sid"><span class="strategy-badge ${d.strategy==='Fast Attempt'?'fast':d.strategy==='Balanced Attempt'?'balanced':'slow'}">${d.strategy}</span></div>
+      </div>
+      <div class="lb-val" style="color:${col}">${valFn(d)}${suffix}</div>
+    </div>`;
+  }).join('');
+}
+function renderLeaderboards() {
+  document.getElementById('lb-fastest').innerHTML=makeLbRows([...processedData].sort((a,b)=>a.avg-b.avg),d=>d.avg.toFixed(1));
+  document.getElementById('lb-slowest').innerHTML=makeLbRows([...processedData].sort((a,b)=>b.avg-a.avg),d=>d.avg.toFixed(1));
+  document.getElementById('lb-consistent').innerHTML=makeLbRows([...processedData].sort((a,b)=>a.stdDev-b.stdDev),d=>d.stdDev.toFixed(1));
+  document.getElementById('lb-variable').innerHTML=makeLbRows([...processedData].sort((a,b)=>b.stdDev-a.stdDev),d=>d.stdDev.toFixed(1));
+}
+
+// ─── TABLE ────────────────────────────
+function setFilter(s) {
+  filterStrategy=s;
+  ['all','fast','balanced','slow'].forEach(k=>{
+    document.getElementById(`btn-${k}`).classList.toggle('active',
+      (s==='all'&&k==='all')||(s==='Fast Attempt'&&k==='fast')||(s==='Balanced Attempt'&&k==='balanced')||(s==='Slow Attempt'&&k==='slow'));
+  });
+  currentPage=1; renderTable();
+}
+
+function renderTable() {
+  const q=document.getElementById('search-box').value.toLowerCase();
+  let filtered=processedData.filter(d=>{
+    if(filterStrategy!=='all'&&d.strategy!==filterStrategy)return false;
+    if(q)return String(d.sid).toLowerCase().includes(q)||d.strategy.toLowerCase().includes(q)||d.qvals.some(v=>String(v).includes(q));
+    return true;
+  });
+  if(sortCol!==null){
+    filtered.sort((a,b)=>{
+      let va,vb;
+      if(sortCol==='sid'){va=a.sid;vb=b.sid;}
+      else if(sortCol==='avg'){va=a.avg;vb=b.avg;}
+      else if(sortCol==='total'){va=a.total;vb=b.total;}
+      else if(sortCol==='stdDev'){va=a.stdDev;vb=b.stdDev;}
+      else if(sortCol==='strategy'){va=a.strategy;vb=b.strategy;}
+      else if(sortCol==='rank'){va=a.rankAvg;vb=b.rankAvg;}
+      else{va=a.qvals[sortCol]||0;vb=b.qvals[sortCol]||0;}
+      if(va<vb)return sortDir==='asc'?-1:1;
+      if(va>vb)return sortDir==='asc'?1:-1;
+      return 0;
+    });
+  }
+  const cols=[
+    {key:'sid',label:'Student ID'},
+    ...colNames.map((c,i)=>({key:i,label:c})),
+    {key:'avg',label:'Avg Time'},
+    {key:'total',label:'Total'},
+    {key:'stdDev',label:'Std Dev'},
+    {key:'rank',label:'Rank'},
+    {key:'strategy',label:'Strategy'},
+  ];
+  document.getElementById('table-head').innerHTML=`<tr>${cols.map(c=>`<th onclick="sortBy('${c.key}')" class="${sortCol===c.key?sortDir:''}">${c.label}</th>`).join('')}</tr>`;
+
+  const total=filtered.length,pages=Math.max(1,Math.ceil(total/PAGE_SIZE));
+  currentPage=Math.min(currentPage,pages);
+  const pageData=filtered.slice((currentPage-1)*PAGE_SIZE,currentPage*PAGE_SIZE);
+  const maxTime=Math.max(...processedData.map(d=>d.total));
+  const totalStudents=processedData.length;
+
+  document.getElementById('table-body').innerHTML=pageData.map(d=>{
+    const cls=d.strategy==='Fast Attempt'?'fast':d.strategy==='Balanced Attempt'?'balanced':'slow';
+    const barColor=cls==='fast'?'var(--fast)':cls==='balanced'?'var(--balanced)':'var(--slow)';
+    const barW=((d.total/maxTime)*100).toFixed(0);
+    const rankPct=((1-d.rankAvg/totalStudents)*100).toFixed(0);
+    return`<tr onclick="openProfile('${d.sid}')">
+      <td><span class="sid-cell">${d.sid}</span></td>
+      ${d.qvals.map(v=>`<td style="font-family:'Space Mono',monospace;font-size:11px">${v}</td>`).join('')}
+      <td style="font-family:'Space Mono',monospace;font-size:11px">${d.avg.toFixed(1)}</td>
+      <td><div class="time-bar"><span style="font-family:'Space Mono',monospace;font-size:11px;min-width:28px">${d.total}</span><div class="time-bar-track"><div class="time-bar-fill" style="width:${barW}%;background:${barColor}"></div></div></div></td>
+      <td style="font-family:'Space Mono',monospace;font-size:11px">${d.stdDev.toFixed(1)}</td>
+      <td style="font-family:'Space Mono',monospace;font-size:11px">#${d.rankAvg} <span style="color:var(--muted);font-size:10px">(top ${rankPct}%)</span></td>
+      <td><span class="strategy-badge ${cls}">${d.strategy}</span></td>
+    </tr>`;
+  }).join('')||`<tr><td colspan="${cols.length}" class="empty-state">No results found.</td></tr>`;
+
+  document.getElementById('table-count').textContent=`${total} attempts`;
+  document.getElementById('pagination').innerHTML=`
+    <button class="page-btn" onclick="goPage(${currentPage-1})" ${currentPage===1?'disabled':''}>←</button>
+    ${Array.from({length:Math.min(pages,7)},(_,i)=>`<button class="page-btn ${i+1===currentPage?'active':''}" onclick="goPage(${i+1})">${i+1}</button>`).join('')}
+    ${pages>7?`<span style="color:var(--muted);font-size:10px">…${pages}</span>`:''}
+    <button class="page-btn" onclick="goPage(${currentPage+1})" ${currentPage===pages?'disabled':''}>→</button>`;
+}
+function sortBy(col){sortCol===col?sortDir=sortDir==='asc'?'desc':'asc':(sortCol=col,sortDir='asc');renderTable();}
+function goPage(p){currentPage=p;renderTable();}
+
+// ─── STUDENT PROFILE MODAL ────────────
+function openProfile(sid) {
+  const d=processedData.find(x=>x.sid===sid);
+  if(!d)return;
+  const cls=d.strategy==='Fast Attempt'?'fast':d.strategy==='Balanced Attempt'?'balanced':'slow';
+  const col=cls==='fast'?'var(--fast)':cls==='balanced'?'var(--balanced)':'var(--slow)';
+  const ico=cls==='fast'?'⚡':cls==='balanced'?'⚖️':'🐢';
+  const totalStudents=processedData.length;
+  const rankPct=((1-d.rankAvg/totalStudents)*100).toFixed(0);
+
+  // Avatar
+  const av=document.getElementById('modal-avatar');
+  av.textContent=ico;
+  av.style.background=`${col}22`;
+  av.style.color=col;
+  av.style.borderColor=`${col}66`;
+
+  document.getElementById('modal-name').textContent=d.sid;
+  document.getElementById('modal-sid').innerHTML=`<span class="strategy-badge ${cls}">${d.strategy}</span> &nbsp; Rank #${d.rankAvg} of ${totalStudents} &nbsp;· &nbsp;Top ${rankPct}%`;
+
+  // Stats
+  document.getElementById('modal-stats').innerHTML=`
+    <div class="mstat"><div class="mstat-val" style="color:${col}">${d.avg.toFixed(1)}</div><div class="mstat-lbl">AVG TIME/Q</div></div>
+    <div class="mstat"><div class="mstat-val">${d.total}</div><div class="mstat-lbl">TOTAL TIME</div></div>
+    <div class="mstat"><div class="mstat-val">${d.stdDev.toFixed(1)}</div><div class="mstat-lbl">STD DEV</div></div>
+    <div class="mstat"><div class="mstat-val" style="color:#ffd200">#${d.rankAvg}</div><div class="mstat-lbl">OVERALL RANK</div></div>`;
+
+  // Per-question bars
+  const maxQ=Math.max(...d.qvals);
+  const allQAvgs=colNames.map((_,qi)=>processedData.reduce((s,x)=>s+(x.qvals[qi]||0),0)/processedData.length);
+  document.getElementById('modal-q-bars').innerHTML=d.qvals.map((v,qi)=>{
+    const pct=(v/maxQ*100).toFixed(0);
+    const vsAvg=v-allQAvgs[qi];
+    const vsCol=vsAvg>0?'var(--slow)':vsAvg<0?'var(--fast)':'var(--muted)';
+    const vsSign=vsAvg>0?'+':'';
+    return`<div class="modal-q-bar-wrap">
+      <div class="modal-q-bar-val" style="color:${col}">${v}</div>
+      <div class="modal-q-bar-outer"><div class="modal-q-bar-inner" style="height:${pct}%;background:${col}88"></div></div>
+      <div class="modal-q-bar-label">${colNames[qi]}</div>
+      <div style="font-family:'Space Mono',monospace;font-size:9px;color:${vsCol}">${vsSign}${vsAvg.toFixed(1)}</div>
+    </div>`;
+  }).join('');
+
+  // Rank chips
+  const byStdDev=[...processedData].sort((a,b)=>a.stdDev-b.stdDev);
+  const consistencyRank=byStdDev.findIndex(x=>x.sid===d.sid)+1;
+  const fastestQ=d.qvals.indexOf(Math.min(...d.qvals));
+  const slowestQ=d.qvals.indexOf(Math.max(...d.qvals));
+  document.getElementById('modal-rank-row').innerHTML=`
+    <div class="rank-chip"><div class="rank-chip-val" style="color:var(--success)">#${consistencyRank}</div><div class="rank-chip-lbl">Consistency Rank</div></div>
+    <div class="rank-chip"><div class="rank-chip-val" style="color:var(--fast)">${colNames[fastestQ]}</div><div class="rank-chip-lbl">Fastest Question</div></div>
+    <div class="rank-chip"><div class="rank-chip-val" style="color:var(--slow)">${colNames[slowestQ]}</div><div class="rank-chip-lbl">Slowest Question</div></div>
+    <div class="rank-chip"><div class="rank-chip-val">${((d.total/processedData.reduce((s,x)=>s+x.total,0)/processedData.length)*100).toFixed(0)}%</div><div class="rank-chip-lbl">of Avg Total</div></div>`;
+
+  // Peer comparison — 4 closest students by avg
+  const peers=[...processedData].filter(x=>x.sid!==d.sid).sort((a,b)=>Math.abs(a.avg-d.avg)-Math.abs(b.avg-d.avg)).slice(0,5);
+  document.getElementById('modal-peers').innerHTML=`<h4>Closest Peers by Avg Time</h4>${peers.map(p=>{
+    const pc=p.strategy==='Fast Attempt'?'fast':p.strategy==='Balanced Attempt'?'balanced':'slow';
+    const pcol=pc==='fast'?'var(--fast)':pc==='balanced'?'var(--balanced)':'var(--slow)';
+    return`<div class="peer-row" onclick="closeModalDirect();setTimeout(()=>openProfile('${p.sid}'),200)">
+      <div class="peer-avatar" style="background:${pcol}22;color:${pcol}">${pc==='fast'?'⚡':pc==='balanced'?'⚖️':'🐢'}</div>
+      <div class="peer-name">${p.sid}</div>
+      <span class="strategy-badge ${pc}" style="font-size:9px">${p.strategy}</span>
+      <div class="peer-avg">${p.avg.toFixed(1)}</div>
+    </div>`;
+  }).join('')}`;
+
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function closeModal(e){if(e.target===document.getElementById('modal-overlay'))closeModalDirect();}
+function closeModalDirect(){document.getElementById('modal-overlay').classList.remove('open');}
+
+// ─── EXPORT ───────────────────────────
+function exportCSV() {
+  const headers=['Student ID',...colNames,'Avg Time','Total','Std Dev','Rank','Strategy'];
+  const rows=processedData.map(d=>[d.sid,...d.qvals,d.avg.toFixed(2),d.total,d.stdDev.toFixed(2),d.rankAvg,d.strategy]);
+  const csv=[headers,...rows].map(r=>r.join(',')).join('\n');
+  const a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download='exam_strategy_analysis.csv';
+  a.click();
+}
+</script>
+</body>
+</html>
