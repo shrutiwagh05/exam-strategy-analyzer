@@ -67,7 +67,4 @@ This project demonstrates how exam timing data can be used to derive meaningful 
 
 
 
->>>>>>> ae66032 (adding a Read me file)
-
-
 
